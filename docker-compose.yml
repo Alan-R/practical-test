@@ -1,0 +1,66 @@
+# vim: smartindent tabstop=4 shiftwidth=4 expandtab number colorcolumn=80
+#
+#       This is a version 2 format Docker-compose file
+#
+#       Sadly at this time, docker-compose is incompatible with swarm mode.
+#
+version: '2'
+services:
+  mongodb:
+   image: mongodb-replica-set
+   networks: [demo-net]
+   expose: [27017]
+   environment:
+    -   ROLE=master
+    -   "SLAVELIST=mongodb-slave1 mongodb-slave2"
+   hostname: mongodb
+   container_name: mongodb
+
+  mongodb-slave1:
+   image: mongodb-replica-set
+   networks: [demo-net]
+   expose: [27017]
+   environment:
+    -   MASTER=mongodb
+   hostname: slave1
+   container_name: slave1
+  mongodb-slave2:
+   image: mongodb-replica-set
+   networks: [demo-net]
+   expose: [27017]
+   environment:
+    -   MASTER=mongodb
+   hostname: slave2
+   container_name: slave2
+
+  node-demo1:
+   image: node-demo
+   expose: [3000]
+   networks: [demo-net]
+   links: [mongodb]
+   environment:
+     - "NODE_ENV=production"
+     - "MONGOHQ_URL=mongodb://mongodb,mongodb-slave1,mongodb-slave2?replicaSet=test"
+     - "VIRTUAL_HOST=localhost"
+     - "VIRTUAL_PORT=3000"
+   hostname: node-demo1
+   container_name: node-demo
+   #entrypoint:
+   #     - /bin/bash
+   #     - -c
+   #     - "set -x; cd /tmp/demo/src; while sleep 10; do /usr/bin/node server.js; echo OOPS $$?; done"
+
+  nginx-proxy:
+    image: jwilder/nginx-proxy # Really cool, and working perfectly for me!
+    networks: [demo-net]
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    depends_on:
+      - node-demo1
+
+networks:
+    demo-net:
+        #driver: overlay

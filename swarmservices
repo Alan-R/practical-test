@@ -1,0 +1,53 @@
+#!/bin/sh -eu
+#
+# vim: smartindent tabstop=4 shiftwidth=4 expandtab number colorcolumn=100
+#
+# Author: Alan Robertson <alanr@unix.sh>
+# Copyright (C) 2016 - Alan Robertson
+#
+#   This code is an attempt to get the demo to work under docker swarm
+#   The remaining problem is getting mongodb to initialize correctly.
+#
+#   At the time of writing this code, Docker compose is restricted to a single
+#   machine, but docker service (for swarm) is not.
+#
+#
+# This software is free software: you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This software is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with the Assimilation Project software.
+# If not, see http://www.gnu.org/licenses/
+#
+get_app_config() {
+    cat <<-!EOF
+	demo^alanr/node-demo^3^--publish 3000:3000 --env NODE_ENV=production --env VIRTUAL_HOST=localhost --env VIRTUAL_PORT=3000 --env MONGOHQ_URL=mongodb://mongodb/?replicaSet=test^
+	nginx^jwilder/nginx-proxy^3^--publish 80:80 --mount type=bind,src=/var/run/docker.sock,dst=/tmp/docker.sock,ro=true
+	mongodb^mongodb-replica-set^3^--publish 27017:27017 --env ROLE=master --env SLAVELIST=mongodb-slave2^
+	!EOF
+}
+configure_apps() {
+    OLDIFS=$IFS
+    get_app_config | 
+    while
+        IFS='^'
+        read app image replicas options command
+    do
+        IFS=$OLDIFS
+        docker service rm $app
+        docker service create       \
+        --name $app        \
+        --mode replicated           \
+        --network swimlane_demo-net \
+        --replicas $replicas        \
+        $options $image $command
+    done
+}
+configure_apps
